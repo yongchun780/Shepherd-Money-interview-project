@@ -1,14 +1,14 @@
 package com.shepherdmoney.interviewproject.model;
 
+import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import java.time.LocalDate;
+import java.util.*;
+
 
 @Entity
 @Getter
@@ -27,6 +27,11 @@ public class CreditCard {
 
     // TODO: Credit card's owner. For detailed hint, please see User class
     // Some field here <> owner;
+    // Credit card's owner. Establish a ManyToOne relationship to the User.
+    @ManyToOne
+    @JoinColumn(name = "user_id") // This will create a column 'user_id' in the CreditCard table to store the ID of the User
+    private User user; // Link back to the User entity
+
 
     // TODO: Credit card's balance history. It is a requirement that the dates in the balanceHistory 
     //       list must be in chronological order, with the most recent date appearing first in the list. 
@@ -47,4 +52,36 @@ public class CreditCard {
     //        4. Deletion of a balance should be fast
     //        5. It is possible that there are gaps in between dates (note the 04-13 and 04-16)
     //        6. In the condition that there are gaps, retrieval of "closest" balance date should also be fast. Aka, given 4-15, return 4-16 entry tuple
+
+
+    @OneToMany(mappedBy = "creditCard", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("date DESC")
+    private List<BalanceHistory> balanceHistories = new ArrayList<>();
+
+    @Transient
+    private NavigableMap<LocalDate, Double> balanceMap = new TreeMap<>(Comparator.reverseOrder());
+
+    @PostLoad
+    private void loadBalanceMap() {
+        balanceMap.clear();
+        balanceHistories.forEach(h -> balanceMap.put(h.getDate(), h.getBalance()));
+    }
+
+    public void syncBalanceHistoriesFromMap() {
+        balanceHistories.clear();
+        balanceMap.forEach((date, balance) -> {
+            BalanceHistory history = new BalanceHistory();
+            history.setDate(date);
+            history.setBalance(balance);
+            history.setCreditCard(this);
+            balanceHistories.add(history);
+        });
+    }
+
+    public void updateBalance(LocalDate date, double balance) {
+        balanceMap.put(date, balance);
+        syncBalanceHistoriesFromMap(); // Sync with the database-managed list
+    }
+
+
 }

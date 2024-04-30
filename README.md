@@ -48,8 +48,8 @@ The application will start running at `http://localhost:8080`.
 * `GET http://localhost:8080/credit-card:user-id` - getUserIdForCreditCard
 * `POST http://localhost:8080/credit-card:update-balance` - updateBalanceHistory
 * `GET http://localhost:8080/credit-card:balance-history` - getBalanceHistoryByCreditCardId
-** This is for debugging
+   This is for debugging
 * `POST http://localhost:8080/credit-card:add-balance` - addBalanceHistory
-** This is for debugging
+   This is for debugging
 
 

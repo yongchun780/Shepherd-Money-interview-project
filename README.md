@@ -54,4 +54,8 @@ The application will start running at `http://localhost:8080`.
 
   This is for debugging
 
+## Author
+* Yongchun Chen - https://github.com/yongchun780
 
+## Questions? 
+If you have any questions, please reach out to yongchun@usc.edu

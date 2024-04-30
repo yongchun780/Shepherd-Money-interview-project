@@ -29,7 +29,6 @@ Step-by-step guide on setting up a local development environment:
    ```
    You may need to check the permission.
 ### Running the Application
-Instructions on how to run the application:
 Open Terminal or Command Prompt in the project's root directory, and run:
    ```bash
    ./gradlew build

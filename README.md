@@ -10,7 +10,7 @@ Briefly describe what your project does and what problem it solves. Include any 
 ### Prerequisites
 List everything needed to get your project up and running:
 - JDK 17
-- Gradle (specify version if necessary)
+- Gradle 
 - Any other software or service dependencies
 
 ### Installation
@@ -19,3 +19,19 @@ Step-by-step guide on setting up a local development environment:
    ```bash
    git clone [repository-url]
    ```
+2. Navigate to the project directory
+   ```bash
+   cd [root directory of this project]
+   ```
+3. Build the project:
+   ```bash
+   ./gradlew build
+   ```
+   You may need to check the permission.
+### Running the Application
+Instructions on how to run the application:
+Open Terminal or Command Prompt in the project's root directory, and run:
+   ```bash
+   ./gradlew build
+   ```
+The application will start running at 'http://localhost:8080'.

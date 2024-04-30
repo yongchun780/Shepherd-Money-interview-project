@@ -17,7 +17,7 @@ List everything needed to get your project up and running:
 Step-by-step guide on setting up a local development environment:
 1. Clone the repository:
    ```bash
-   git clone [repository-url]
+   git clone https://github.com/yongchun780/shepherd-money-interview-project.git
    ```
 2. Navigate to the project directory
    ```bash

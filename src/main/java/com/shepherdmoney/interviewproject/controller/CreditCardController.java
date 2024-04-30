@@ -106,15 +106,19 @@ public class CreditCardController {
         //      For example: if today is 4/12, a credit card's balanceHistory is [{date: 4/12, balance: 110}, {date: 4/10, balance: 100}],
         //      Given a balance amount of {date: 4/11, amount: 110}, the new balanceHistory is
         //      [{date: 4/12, balance: 120}, {date: 4/11, balance: 110}, {date: 4/10, balance: 100}]
+        //      This is because
+        //      1. You would first populate 4/11 with previous day's balance (4/10), so {date: 4/11, amount: 100}
+        //      2. And then you observe there is a +10 difference
+        //      3. You propagate that +10 difference until today
         //      Return 200 OK if update is done and successful, 400 Bad Request if the given card number
         //        is not associated with a card.
-
 
         if (payloads == null || payloads.length == 0) {
             return ResponseEntity.badRequest().body("No payloads provided.");
         }
 
         Arrays.sort(payloads, Comparator.comparing(UpdateBalancePayload::getBalanceDate));
+        LocalDate today = LocalDate.now();
 
         for (UpdateBalancePayload payload : payloads) {
             Optional<CreditCard> cardOpt = creditCardRepository.findByNumber(payload.getCreditCardNumber());
@@ -122,58 +126,77 @@ public class CreditCardController {
                 return ResponseEntity.badRequest().body("Credit card not found for number: " + payload.getCreditCardNumber());
             }
             CreditCard card = cardOpt.get();
-
             TreeMap<LocalDate, Double> balanceMap = new TreeMap<>();
 
             // Load existing balances into a TreeMap
             card.getBalanceHistories().forEach(h -> balanceMap.put(h.getDate(), h.getBalance()));
-            balanceMap.put(payload.getBalanceDate(), payload.getBalanceAmount());
 
-            // Update the TreeMap with new balances and fill the gaps
-            fillGaps(balanceMap, payload);
+            // First fill gaps up to the date before the new balance
+            fillGaps(balanceMap);
+
+            // Check if the date exists and calculate the difference
+            double existingBalance = balanceMap.getOrDefault(payload.getBalanceDate(), balanceMap.lowerEntry(payload.getBalanceDate()) != null ? balanceMap.lowerEntry(payload.getBalanceDate()).getValue() : 0);
+            double newBalance = payload.getBalanceAmount();
+            double difference = Math.abs(newBalance - existingBalance); // Absolute difference
+
+            // Put the new balance or calculate absolute difference if entry exists
+            balanceMap.put(payload.getBalanceDate(), newBalance);
+
+            // Propagate the difference if it's not zero and if there's an existing balance to adjust
+            if (difference != 0) {
+                propagateDifference(balanceMap, payload.getBalanceDate(), difference);
+            }
+
+            // Check if today's date already exists in the balance history
+            if (!balanceMap.containsKey(today)) {
+                ensureLastEntryMatchesToday(balanceMap);
+            }
 
             // Sync back to the database
-            card.getBalanceHistories().clear();
-            balanceMap.forEach((date, balance) -> {
-                BalanceHistory history = new BalanceHistory();
-                history.setDate(date);
-                history.setBalance(balance);
-                history.setCreditCard(card);
-                card.getBalanceHistories().add(history);
-            });
-
-            creditCardRepository.save(card);
+            syncBalancesToDatabase(card, balanceMap);
         }
         return ResponseEntity.ok("Balance histories updated successfully.");
     }
 
-    private void fillGaps(TreeMap<LocalDate, Double> balanceMap, UpdateBalancePayload payload) {
+    private void fillGaps(TreeMap<LocalDate, Double> balanceMap) {
         LocalDate lastDate = null;
         double lastBalance = 0;
-
         List<LocalDate> keys = new ArrayList<>(balanceMap.keySet());
-        for (int i = 0; i < keys.size(); i++) {
-            LocalDate current = keys.get(i);
-            if (lastDate != null && !lastDate.plusDays(1).equals(current)) {
-                LocalDate date = lastDate.plusDays(1);
-                while (date.isBefore(current)) {
-                    balanceMap.putIfAbsent(date, lastBalance);
-                    date = date.plusDays(1);
+        for (LocalDate date : keys) {
+            if (lastDate != null) {
+                LocalDate nextDate = lastDate.plusDays(1);
+                while (nextDate.isBefore(date)) {
+                    balanceMap.putIfAbsent(nextDate, lastBalance);
+                    nextDate = nextDate.plusDays(1);
                 }
             }
-            lastDate = current;
-            lastBalance = balanceMap.get(current);
+            lastDate = date;
+            lastBalance = balanceMap.get(date);
         }
-
-        // Ensure the last entry matches today's date
-        ensureLastEntryMatchesToday(balanceMap, lastDate, lastBalance);
     }
 
-    private void ensureLastEntryMatchesToday(TreeMap<LocalDate, Double> balanceMap, LocalDate lastDate, double lastBalance) {
+    private void propagateDifference(TreeMap<LocalDate, Double> balanceMap, LocalDate startDate, double difference) {
+        balanceMap.tailMap(startDate, false).forEach((date, balance) -> balanceMap.put(date, balance + difference));
+    }
+
+    private void ensureLastEntryMatchesToday(TreeMap<LocalDate, Double> balanceMap) {
         LocalDate today = LocalDate.now();
-        if (!lastDate.equals(today)) {
-            balanceMap.putIfAbsent(today, lastBalance);
+        Map.Entry<LocalDate, Double> lastEntry = balanceMap.lastEntry();
+        if (lastEntry != null && !lastEntry.getKey().equals(today)) {
+            balanceMap.put(today, lastEntry.getValue());
         }
+    }
+
+    private void syncBalancesToDatabase(CreditCard card, TreeMap<LocalDate, Double> balanceMap) {
+        card.getBalanceHistories().clear();
+        balanceMap.forEach((date, balance) -> {
+            BalanceHistory history = new BalanceHistory();
+            history.setDate(date);
+            history.setBalance(balance);
+            history.setCreditCard(card);
+            card.getBalanceHistories().add(history);
+        });
+        creditCardRepository.save(card);
     }
 
     // This is for debugging
@@ -189,5 +212,33 @@ public class CreditCardController {
                 .map(history -> new CardBalanceHistoryView(history.getDate(), history.getBalance()))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(historiesView);
+    }
+    // This is for debugging
+    @PostMapping("/credit-card:add-balance")
+    public ResponseEntity<String> addBalanceHistory(@RequestBody UpdateBalancePayload[] payloads) {
+        if (payloads == null || payloads.length == 0) {
+            return ResponseEntity.badRequest().body("No balance data provided.");
+        }
+
+        for (UpdateBalancePayload payload : payloads) {
+            Optional<CreditCard> cardOpt = creditCardRepository.findByNumber(payload.getCreditCardNumber());
+            if (!cardOpt.isPresent()) {
+                return ResponseEntity.badRequest().body("Credit card not found for number: " + payload.getCreditCardNumber());
+            }
+
+            CreditCard card = cardOpt.get();
+
+            // Create new BalanceHistory object and set its values
+            BalanceHistory newHistory = new BalanceHistory();
+            newHistory.setCreditCard(card);
+            newHistory.setDate(payload.getBalanceDate());
+            newHistory.setBalance(payload.getBalanceAmount());
+
+            // Add to the card's balance history list and save
+            card.getBalanceHistories().add(newHistory);
+            creditCardRepository.save(card);
+        }
+
+        return ResponseEntity.ok("Balance history added successfully.");
     }
 }

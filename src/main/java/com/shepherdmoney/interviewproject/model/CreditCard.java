@@ -27,6 +27,7 @@ public class CreditCard {
 
     // TODO: Credit card's owner. For detailed hint, please see User class
     // Some field here <> owner;
+
     // Credit card's owner. Establish a ManyToOne relationship to the User.
     @ManyToOne
     @JoinColumn(name = "user_id") // This will create a column 'user_id' in the CreditCard table to store the ID of the User
@@ -51,7 +52,7 @@ public class CreditCard {
     //        3. Insertion of a new balance should be fast
     //        4. Deletion of a balance should be fast
     //        5. It is possible that there are gaps in between dates (note the 04-13 and 04-16)
-    //        6. In the condition that there are gaps, retrieval of "closest" balance date should also be fast. Aka, given 4-15, return 4-16 entry tuple
+    //        6. In the condition that there are gaps, retrieval of "closest **previous**" balance date should also be fast. Aka, given 4-15, return 4-13 entry tuple
 
 
     @OneToMany(mappedBy = "creditCard", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
@@ -67,7 +68,36 @@ public class CreditCard {
         balanceHistories.forEach(h -> balanceMap.put(h.getDate(), h.getBalance()));
     }
 
-    public void syncBalanceHistoriesFromMap() {
+    /*
+     * Below are some potential methods associated with the ADDITIONAL NOTE above.
+     * They may be used for testing or future development,
+     * but are not used at the current stage.
+     */
+    public Double getBalanceOn(LocalDate date) {
+        return balanceMap.get(date);
+    }
+
+    public void insertOrUpdateBalance(LocalDate date, Double balance) {
+        balanceMap.put(date, balance);
+        syncBalanceHistoriesFromMap();
+    }
+
+    public void deleteBalance(LocalDate date) {
+        if (balanceMap.containsKey(date)) {
+            balanceMap.remove(date);
+            syncBalanceHistoriesFromMap();
+        }
+    }
+
+    public Double getClosestPreviousBalance(LocalDate date) {
+        return balanceMap.headMap(date, false).firstEntry().getValue();
+    }
+
+    public Map<LocalDate, Double> getBalances() {
+        return new TreeMap<>(balanceMap);
+    }
+
+    private void syncBalanceHistoriesFromMap() {
         balanceHistories.clear();
         balanceMap.forEach((date, balance) -> {
             BalanceHistory history = new BalanceHistory();
@@ -77,11 +107,4 @@ public class CreditCard {
             balanceHistories.add(history);
         });
     }
-
-    public void updateBalance(LocalDate date, double balance) {
-        balanceMap.put(date, balance);
-        syncBalanceHistoriesFromMap(); // Sync with the database-managed list
-    }
-
-
 }

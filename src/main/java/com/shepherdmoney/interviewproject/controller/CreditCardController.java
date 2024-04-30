@@ -217,28 +217,58 @@ public class CreditCardController {
     @PostMapping("/credit-card:add-balance")
     public ResponseEntity<String> addBalanceHistory(@RequestBody UpdateBalancePayload[] payloads) {
         if (payloads == null || payloads.length == 0) {
-            return ResponseEntity.badRequest().body("No balance data provided.");
+            return ResponseEntity.badRequest().body("No payloads provided.");
         }
+
+        StringBuilder responseMessage = new StringBuilder();
 
         for (UpdateBalancePayload payload : payloads) {
             Optional<CreditCard> cardOpt = creditCardRepository.findByNumber(payload.getCreditCardNumber());
             if (!cardOpt.isPresent()) {
-                return ResponseEntity.badRequest().body("Credit card not found for number: " + payload.getCreditCardNumber());
+                responseMessage.append("Credit card not found for number: ")
+                        .append(payload.getCreditCardNumber())
+                        .append("; ");
+                continue;
             }
-
             CreditCard card = cardOpt.get();
 
-            // Create new BalanceHistory object and set its values
-            BalanceHistory newHistory = new BalanceHistory();
-            newHistory.setCreditCard(card);
-            newHistory.setDate(payload.getBalanceDate());
-            newHistory.setBalance(payload.getBalanceAmount());
+            // Check if a balance history for this date already exists
+            Optional<BalanceHistory> existingHistoryOpt = card.getBalanceHistories().stream()
+                    .filter(h -> h.getDate().equals(payload.getBalanceDate()))
+                    .findFirst();
 
-            // Add to the card's balance history list and save
-            card.getBalanceHistories().add(newHistory);
-            creditCardRepository.save(card);
+            if (existingHistoryOpt.isPresent()) {
+                // Update existing balance
+                BalanceHistory existingHistory = existingHistoryOpt.get();
+                existingHistory.setBalance(payload.getBalanceAmount());
+                responseMessage.append("Updated balance for date: ")
+                        .append(payload.getBalanceDate())
+                        .append(", card number: ")
+                        .append(payload.getCreditCardNumber())
+                        .append("; ");
+            } else {
+                // Add new balance history
+                BalanceHistory newHistory = new BalanceHistory();
+                newHistory.setDate(payload.getBalanceDate());
+                newHistory.setBalance(payload.getBalanceAmount());
+                newHistory.setCreditCard(card);
+                card.getBalanceHistories().add(newHistory);
+                responseMessage.append("Added new balance for date: ")
+                        .append(payload.getBalanceDate())
+                        .append(", card number: ")
+                        .append(payload.getCreditCardNumber())
+                        .append("; ");
+            }
         }
 
-        return ResponseEntity.ok("Balance history added successfully.");
+        // Save all changes to the repository
+        creditCardRepository.saveAll(
+                Arrays.stream(payloads)
+                        .map(p -> creditCardRepository.findByNumber(p.getCreditCardNumber()).orElse(null))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList())
+        );
+
+        return ResponseEntity.ok(responseMessage.toString());
     }
 }

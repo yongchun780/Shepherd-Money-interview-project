@@ -214,7 +214,7 @@ public class CreditCardController {
         return ResponseEntity.ok(historiesView);
     }
     // This is for debugging
-    @PostMapping("/credit-card/add-balance")
+    @PostMapping("/credit-card:add-balance")
     public ResponseEntity<String> addBalanceHistory(@RequestBody UpdateBalancePayload[] payloads) {
         if (payloads == null || payloads.length == 0) {
             return ResponseEntity.badRequest().body("No payloads provided.");

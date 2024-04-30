@@ -73,6 +73,7 @@ public class CreditCard {
      * They may be used for testing or future development,
      * but are not used at the current stage.
      */
+    
     public Double getBalanceOn(LocalDate date) {
         return balanceMap.get(date);
     }

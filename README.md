@@ -31,7 +31,7 @@ Step-by-step guide on setting up a local development environment:
 ### Running the Application
 Open Terminal or Command Prompt in the project's root directory, and run:
    ```bash
-   ./gradlew build
+   ./gradlew bootRun
    ```
 The application will start running at `http://localhost:8080`.
 
